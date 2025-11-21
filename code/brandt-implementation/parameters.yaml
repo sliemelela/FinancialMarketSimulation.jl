@@ -1,0 +1,100 @@
+# -----------------
+# 1. SIMULATION GRID
+# -----------------
+SimulationParams:
+  sim: 100
+  T: 5.0
+  M: 5.0
+
+# -----------------
+# 2. SHOCK DEFINITION
+# -----------------
+ShockOrder: ["r", "π", "S"]
+
+# -----------------
+# 3. PARAMETER "PANTRY" (DRY)
+# -----------------
+Parameters:
+  Correlations:
+      ρ_rπ: 0.4
+      ρ_rS: 0.2
+      ρ_πS: 0.1
+
+  Vasicek_r:
+    κ: 0.3
+    θ: 0.05
+    σ: 0.02
+    initial_value: 0.05
+
+  Vasicek_pi:
+    κ: 0.5
+    θ: 0.02
+    σ: 0.01
+    initial_value: 0.02
+
+  Stock_S:
+    a: 1.0
+    b: 0.5
+    σ_S: 0.20
+    λ_S: 0.25
+    initial_value: 100.0
+
+  MPR: # Market Price of Risk Factors
+    ϕ_r: -0.1
+    ϕ_π: -0.1
+    ϕ_S: -0.2
+
+# -----------------
+# 4. MODEL "RECIPE" (GENERAL)
+#    A list of processes to build.
+# -----------------
+Processes:
+  - name: "r"
+    type: "vasicek"
+    params_from: "Vasicek_r"
+    shock_index: 1
+
+  - name: "π"
+    type: "vasicek"
+    params_from: "Vasicek_pi"
+    shock_index: 2
+
+  - name: "Π"
+    type: "cpi"
+    # No params, depends on :pi which must be built first
+
+  - name: "S"
+    type: "lognormal"
+    params_from: "Stock_S"
+    shock_index: 3
+    drift_rule: "stock_drift_1"
+    diffusion_rule: "stock_diffusion_1"
+
+  - name: "P_N"
+    type: "nominal_bond"
+    # This process needs multiple parameter blocks
+    params_from: ["Vasicek_r", "MPR", "Correlations"]
+
+  - name: "P_I"
+    type: "inflation_bond"
+    params_from: ["Vasicek_r", "Vasicek_pi", "MPR", "Correlations"]
+
+# -----------------
+# 5. RETURNS & SOLVER CONFIG
+# -----------------
+Returns:
+  - name: "Re_NominalBond"
+    asset_path: "P_N"
+  - name: "Re_InflBond"
+    asset_path: "P_I"
+  - name: "Re_Stock"
+    asset_path: "S"
+
+SolverParams:
+  asset_names: ["Re_NominalBond", "Re_InflBond", "Re_Stock"]
+  state_names: ["r", "π"]
+  W_grid: [50.0, 75.0, 100.0, 125.0, 150.0]
+  poly_order: 2
+  p_income: 0.0
+  O_t_real_path: null
+  γ: 5.0
