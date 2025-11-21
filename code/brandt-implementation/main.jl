@@ -59,5 +59,7 @@ function run_full_analysis(config_filename::String)
     return all_worlds, all_final_policies
 end
 
-all_worlds, all_final_policies = run_full_analysis("parameters.yaml")
+@profview run_full_analysis("parameters.yaml")
 nothing
+
+# TODO: Make everything faster!
