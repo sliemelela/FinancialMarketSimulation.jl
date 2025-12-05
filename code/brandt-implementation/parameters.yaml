@@ -3,8 +3,8 @@
 # -----------------
 SimulationParams:
   sim: 10000
-  T: 5.0
-  M: 5.0
+  T: 4.0
+  M: 4.0
 
 # -----------------
 # 2. SHOCK DEFINITION
@@ -34,7 +34,7 @@ Parameters:
 
   Stock_S:
     a: 1.0
-    b: 0.5
+    b: 0.0
     σ_S: 0.20
     λ_S: 0.25
     initial_value: 100.0
@@ -52,21 +52,22 @@ Processes:
   - name: "r"
     type: "vasicek"
     params_from: "Vasicek_r"
-    shock_index: 1
+    shocks: "r"
 
   - name: "π"
     type: "vasicek"
     params_from: "Vasicek_pi"
-    shock_index: 2
+    shocks: "π"
 
   - name: "Π"
+    params_from: "Vasicek_pi"
     type: "cpi"
     # No params, depends on :pi which must be built first
 
   - name: "S"
     type: "lognormal"
     params_from: "Stock_S"
-    shock_index: 3
+    shocks: "S"
     drift_rule: "stock_drift_1"
     diffusion_rule: "stock_diffusion_1"
 
@@ -82,7 +83,7 @@ Processes:
 # -----------------
 # 5. RETURNS & SOLVER CONFIG
 # -----------------
-Returns:
+ExcessReturns:
   - name: "Re_NominalBond"
     asset_path: "P_N"
   - name: "Re_InflBond"
@@ -90,9 +91,17 @@ Returns:
   - name: "Re_Stock"
     asset_path: "S"
 
+Returns:
+  - name: "R_NominalBond"
+    asset_path: "P_N"
+  - name: "R_InflBond"
+    asset_path: "P_I"
+  - name: "R_Stock"
+    asset_path: "S"
+
 SolverParams:
-  asset_names: ["Re_NominalBond", "Re_InflBond", "Re_Stock"]
-  state_names: ["r", "π"]
+  asset_names: ["Re_Stock"]
+  state_names: ["r"]
   W_grid: [50.0, 75.0, 100.0, 125.0, 150.0]
   poly_order: 2
   p_income: 0.0

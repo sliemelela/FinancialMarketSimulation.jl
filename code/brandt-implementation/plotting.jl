@@ -1,235 +1,107 @@
-"""
-    plot_makie_paths!(
-        fig::Figure,
-        ax::Axis,
-        world::SimulationWorld,
-        name::Symbol;
-        count::Int = 20,
-        color = (:blue, 0.1) # Tuple for color and alpha
-    )
+# plotting.jl
 
-Plots a sample of simulated paths to a Makie Axis.
-"""
-function plot_makie_paths!(
-    fig::Figure,
-    ax::Axis,
-    world::SimulationWorld,
-    name::Symbol;
-    count::Int = 20,
-    color = (:blue, 0.1) # Makie likes (color, alpha) tuples
-)
-    # 1. Get the data
-    if !haskey(world.paths, name)
-        error("Path ':$name' not found in SimulationWorld.")
-    end
-    data = world.paths[name]
+using GLMakie
+using Statistics
+
+# ==============================================================================
+# 1. LOW-LEVEL PLOTTING KERNELS (Generic)
+# ==============================================================================
+
+function _core_plot_paths!(ax, t, data::AbstractMatrix; count::Int=20, color=(:blue, 0.1))
     sim_count = size(data, 1)
+    n_plot = min(sim_count, count)
+    path_indices = rand(1:sim_count, n_plot)
 
-    # 2. Create the time vector
-    t = 0:world.δt:world.sim_params.T
-
-    # 3. Determine which paths to plot (random sample)
-    path_indices = rand(1:sim_count, min(sim_count, count))
-
-    # 4. Add the paths
     @views for i in path_indices
-        # `lines!` adds a line plot to the axis
         lines!(ax, t, data[i, :], color=color)
     end
-
-    return fig, ax
 end
 
-"""
-    plot_makie_mean_path!(
-        fig::Figure,
-        ax::Axis,
-        world::SimulationWorld,
-        name::Symbol;
-        show_ci::Bool = true,
-        mean_color = :black,
-        ci_color = (:black, 0.2)
-    )
-
-Plots the mean path and (optionally) a 90% confidence interval to a Makie Axis.
-"""
-function plot_makie_mean_path!(
-    fig::Figure,
-    ax::Axis,
-    world::SimulationWorld,
-    name::Symbol;
-    show_ci::Bool = true,
-    mean_color = :black,
-    ci_color = (:black, 0.2)
-)
-    # 1. Get the data
-    if !haskey(world.paths, name)
-        error("Path ':$name' not found in SimulationWorld.")
-    end
-    data = world.paths[name]
-
-    # 2. Create the time vector
-    t = 0:world.δt:world.sim_params.T
-
-    # 3. Calculate statistics
-    mean_path = mean(data, dims=1)[1, :]
-
-    # 4. Add confidence interval
+function _core_plot_mean_ci!(ax, t, data::AbstractMatrix; show_ci=true, mean_color=:black, ci_color=(:black, 0.2))
+    mean_path = vec(mean(data, dims=1))
     if show_ci
         q_low = [quantile(col, 0.05) for col in eachcol(data)]
         q_high = [quantile(col, 0.95) for col in eachcol(data)]
-
-        # `band!` is Makie's version of `ribbon`
         band!(ax, t, q_low, q_high, color=ci_color, label="90% C.I.")
     end
-
-    # 5. Add the mean path (plotted on top)
     lines!(ax, t, mean_path, color=mean_color, linewidth=2, label="Mean")
+end
 
+
+# ==============================================================================
+# 2. INTERFACE A: SIMULATION WORLD
+# ==============================================================================
+
+function plot_makie_paths!(
+    fig::Figure, ax::Axis,
+    world::SimulationWorld, name::Symbol;
+    count::Int=20, color=(:blue, 0.1)
+)
+    if !haskey(world.paths, name)
+        error("Path ':$name' not found in SimulationWorld.")
+    end
+
+    data = world.paths[name]
+    t = 0:world.δt:world.sim_params.T
+
+    _core_plot_paths!(ax, t, data; count=count, color=color)
+    return fig, ax
+end
+
+function plot_makie_mean_path!(
+    fig::Figure, ax::Axis,
+    world::SimulationWorld, name::Symbol;
+    show_ci::Bool=true, mean_color=:black, ci_color=(:black, 0.2)
+)
+    data = world.paths[name]
+    t = 0:world.δt:world.sim_params.T
+
+    _core_plot_mean_ci!(ax, t, data; show_ci=show_ci, mean_color=mean_color, ci_color=ci_color)
     return fig, ax
 end
 
 
+# ==============================================================================
+# 3. HIGH-LEVEL ORCHESTRATION
+# ==============================================================================
+
 function plot_world_paths(world::SimulationWorld)
+    println("Generating Market Asset plots...")
 
-    println("Generating plots...")
-    # 1. Create a Figure with a 2-row, 1-column layout
-    fig = Figure(size = (800, 800))
+    paths_to_plot = [
+        (:P_N, "Nominal Bond Price P_N(t, T)", "Price", "nominal_bond_plot.png", (:green, 0.05)),
+        (:S, "Stock Price S(t)", "Price", "stock_price_plot.png", (:blue, 0.05)),
+        (:r, "Short Rate r(t)", "Short Rate", "short_rate_plot.png", (:cyan, 0.05)),
+        (:Re_Stock, "Excess Simple Return Stock", "Excess Return", "excess_return_stock_plot.png", (:magenta, 0.05)),
+        (:Re_NominalBond, "Excess Simple Return Bond", "Excess Return", "excess_return_bond_plot.png", (:brown, 0.05)),
+        (:Re_InflationBond, "Excess Simple Return Inflation Bond", "Excess Return", "excess_return_inflation_bond_plot.png", (:brown, 0.05)),
+        (:R_Stock, "Simple return Stock", "Return", "simple_return_stock_plot.png", (:blue, 0.05)),
+        (:R_NominalBond, "Simple return Bond", "Return", "simple_return_bond_plot.png", (:green, 0.05)),
+        (:R_InflationBond, "Simple return Inflation Bond", "Return", "simple_return_inflation_bond_plot.png", (:green, 0.05)),
+    ]
 
-    # 2. Create the top axis for the paths
-    ax_paths = Axis(fig[1, 1],
-        title = "Nominal Bond Price P_N(t, T) (T=$(world.sim_params.T))",
-        ylabel = "Price"
-    )
+    for (path_name, title_str, ylabel_str, filename, color) in paths_to_plot
+        if !haskey(world.paths, path_name)
+            continue
+        end
 
-    # 3. Create the bottom axis for the histogram
-    ax_hist = Axis(fig[2, 1],
-        title = "Distribution of P_N(T - δt)",
-        xlabel = "Price"
-    )
+        fig = Figure(size = (800, 800))
 
-    # 4. Plot paths on the top axis
-    plot_makie_paths!(fig, ax_paths, world, :P_N, count=200, color=(:green, 0.05))
-    plot_makie_mean_path!(fig, ax_paths, world, :P_N, mean_color=:black)
-    axislegend(ax_paths, position=:rb) # bottom-right
+        ax_paths = Axis(fig[1, 1], title = "$title_str (T=$(world.sim_params.T))", ylabel = ylabel_str)
+        plot_makie_paths!(fig, ax_paths, world, path_name, count=100, color=color)
+        plot_makie_mean_path!(fig, ax_paths, world, path_name, mean_color=:black)
 
-    # 5. Plot a histogram on the bottom axis
-    # Get prices just before maturity (at T they are all exactly 1.0)
-    prices_before_maturity = world.paths[:P_N][:, end-1]
-    hist!(ax_hist, prices_before_maturity, bins=100, color=:green, strokewidth=1, strokecolor=:black)
+        ax_hist = Axis(fig[2, 1], title = "Distribution at T - δt", xlabel = ylabel_str)
+        end_values = world.paths[path_name][:, end - 1]
+        hist!(ax_hist, end_values, bins=50, color=color[1], strokewidth=1, strokecolor=:black)
 
-    # 6. Save and display the figure
-    save("nominal_bond_plot.png", fig)
-
-    # Now make same for inflation bond, but with window with CPI added
-    fig2 = Figure(size = (800, 800))
-    ax2_paths = Axis(fig2[1, 1],
-        title = "Inflation Bond Price P_I(t, T) (T=$(world.sim_params.T))",
-        ylabel = "Price"
-    )
-    ax2_hist = Axis(fig2[2, 1],
-        title = "Distribution of P_I(T - δt)",
-        xlabel = "Price"
-    )
-    plot_makie_paths!(fig2, ax2_paths, world, :P_I, count=200, color=(:orange, 0.05))
-    plot_makie_mean_path!(fig2, ax2_paths, world, :P_I, mean_color=:black)
-    axislegend(ax2_paths, position=:rb)
-    prices_I_before_maturity = world.paths[:P_I][:, end-1]
-    hist!(ax2_hist, prices_I_before_maturity, bins=100, color=:orange, strokewidth=1, strokecolor=:black)
-
-    # Save and display the second figure
-    save("inflation_bond_plot.png", fig2)
-
-    # Now make the same for stock prices
-    fig3 = Figure(size = (800, 800))
-    ax3_paths = Axis(fig3[1, 1],
-        title = "Stock Price S(t) (T=$(world.sim_params.T))",
-        ylabel = "Price"
-    )
-    ax3_hist = Axis(fig3[2, 1],
-        title = "Distribution of S(T - δt)",
-        xlabel = "Price"
-    )
-    plot_makie_paths!(fig3, ax3_paths, world, :S, count=200, color=(:blue, 0.05))
-    plot_makie_mean_path!(fig3, ax3_paths, world, :S, mean_color=:black)
-    axislegend(ax3_paths, position=:rb)
-    prices_stock_before_maturity = world.paths[:S][:, end-1]
-    hist!(ax3_hist, prices_stock_before_maturity, bins=100, color=:blue, strokewidth=1, strokecolor=:black)
-
-    # Save and display the third figure
-    save("stock_price_plot.png", fig3)
-
-    # Plot also the CPI path
-    fig4 = Figure(size = (800, 600))
-    ax4_paths = Axis(fig4[1, 1],
-        title = "Consumer Price Index Π(t) (T=$(world.sim_params.T))",
-        ylabel = "CPI"
-    )
-    plot_makie_paths!(fig4, ax4_paths, world, :Π, count=200, color=(:purple, 0.05))
-    plot_makie_mean_path!(fig4, ax4_paths, world, :Π, mean_color=:black)
-    axislegend(ax4_paths, position=:rb)
-    save("CPI_plot.png", fig4)
-
-    # Plot the inflation path
-    fig5 = Figure(size = (800, 600))
-    ax5_paths = Axis(fig5[1, 1],
-        title = "Inflation Rate π(t) (T=$(world.sim_params.T))",
-        ylabel = "Inflation Rate"
-    )
-    plot_makie_paths!(fig5, ax5_paths, world, :π, count=200, color=(:red, 0.05))
-    plot_makie_mean_path!(fig5, ax5_paths, world, :π, mean_color=:black)
-    axislegend(ax5_paths, position=:rb) # bottom-right
-    save("inflation_rate_plot.png", fig5)
-
-    # Plot the interest rate path
-    fig6 = Figure(size = (800, 600))
-    ax6_paths = Axis(fig6[1, 1],
-        title = "Short Rate r(t) (T=$(world.sim_params.T))",
-        ylabel = "Short Rate"
-    )
-    plot_makie_paths!(fig6, ax6_paths, world, :r, count=200, color=(:cyan, 0.05))
-    plot_makie_mean_path!(fig6, ax6_paths, world, :r, mean_color=:black)
-    axislegend(ax6_paths, position=:rb) # bottom-right
-    save("short_rate_plot.png", fig6)
-
-    # Plot the excess return of the stock
-    fig7 = Figure(size = (800, 600))
-    ax7_paths = Axis(fig7[1, 1],
-        title = "Excess Simple Return of Stock Re_Stock(t) (T=$(world.sim_params.T))",
-        ylabel = "Excess Simple Return"
-    )
-    plot_makie_paths!(fig7, ax7_paths, world, :Re_Stock, count=200, color=(:magenta, 0.05))
-    plot_makie_mean_path!(fig7, ax7_paths, world, :Re_Stock, mean_color=:black)
-    axislegend(ax7_paths, position=:rb) # bottom-right
-    save("excess_return_stock_plot.png", fig7)
-
-    # Plot the excess return of the nominal bond
-    fig8 = Figure(size = (800, 600))
-    ax8_paths = Axis(fig8[1, 1],
-        title = "Excess Simple Return of Nominal Bond Re_NominalBond(t) (T=$(world.sim_params.T))",
-        ylabel = "Excess Simple Return"
-    )
-    plot_makie_paths!(fig8, ax8_paths, world, :Re_NominalBond, count=200, color=(:brown, 0.05))
-    plot_makie_mean_path!(fig8, ax8_paths, world, :Re_NominalBond, mean_color=:black)
-    axislegend(ax8_paths, position=:rb) # bottom-right
-    save("excess_return_nominal_bond_plot.png", fig8)
-
-    # Plot the excess return of the inflation bond
-    fig9 = Figure(size = (800, 600))
-    ax9_paths = Axis(fig9[1, 1],
-        title = "Excess Simple Return of Inflation Bond Re_InflBond(t) (T=$(world.sim_params.T))",
-        ylabel = "Excess Simple Return"
-    )
-    plot_makie_paths!(fig9, ax9_paths, world, :Re_InflBond, count=200, color=(:teal, 0.05))
-    plot_makie_mean_path!(fig9, ax9_paths, world, :Re_InflBond, mean_color=:black)
-    axislegend(ax9_paths, position=:rb) # bottom-right
-    save("excess_return_inflation_bond_plot.png", fig9)
+        save(filename, fig)
+    end
 end
 
 function plot_policy(world::SimulationWorld, solver_params, ω_l)
 
-
-    t_list = [1, 2]
+    t_list = 1:(world.sim_params.M)
     for t_to_plot in t_list
         println("Generating final policy plot for t=$t_to_plot...")
 
@@ -248,11 +120,6 @@ function plot_policy(world::SimulationWorld, solver_params, ω_l)
         # Calculate the mean policy at each grid point
         mean_policy_per_W = [mean(policy_on_grid[:, j]) for j in 1:length(W_grid)]
 
-        # Separate components for plotting
-        mean_pol_asset1 = [v[1] for v in mean_policy_per_W]
-        mean_pol_asset2 = [v[2] for v in mean_policy_per_W]
-        mean_pol_asset3 = [v[3] for v in mean_policy_per_W]
-
         # Create the final plot
         fig_policy = Figure(size = (800, 600))
         ax_policy = Axis(fig_policy[1, 1],
@@ -261,13 +128,40 @@ function plot_policy(world::SimulationWorld, solver_params, ω_l)
             ylabel = "Policy Weight"
         )
 
-        lines!(ax_policy, W_grid, mean_pol_asset1, label=String(solver_params.asset_names[1]), linewidth=2)
-        lines!(ax_policy, W_grid, mean_pol_asset2, label=String(solver_params.asset_names[2]), linewidth=2)
-        lines!(ax_policy, W_grid, mean_pol_asset3, label=String(solver_params.asset_names[3]), linewidth=2)
+        # --- DYNAMIC ASSET LOOP ---
+        for k in 1:N_assets
+            # Extract the k-th weight component for every grid point
+            mean_pol_asset_k = [v[k] for v in mean_policy_per_W]
+
+            # Plot with automatic color cycling
+            lines!(ax_policy, W_grid, mean_pol_asset_k,
+                   label=String(solver_params.asset_names[k]),
+                   linewidth=2)
+        end
+        # ---------------------------
+
         axislegend(ax_policy, position=:rt)
 
         save("optimal_policy_t$t_to_plot.png", fig_policy)
 
     end
+
+
+
+end
+
+function save_value_and_CE_to_csv(i, world, solver_params, ω_l, my_utility)
+    println("Calculating value function and certainty equivalent wealth...")
+    open("value_function_set_$i.csv", "w") do io
+            println(io, "==================================================")
+            println(io, "METRICS REPORT: $i")
+            println(io, "==================================================")
+            println(io, "")
+            println(io, "Wealth,J_star,CE_star")
+            for W_1 in solver_params.W_grid
+                J_W1, CE_1 = calculate_expected_utility(world, solver_params, ω_l, 1, W_1, nothing, my_utility)
+                println(io, "$W_1,$J_W1,$CE_1")
+            end
+        end
     println("All tasks complete. Final policy plot saved.")
 end

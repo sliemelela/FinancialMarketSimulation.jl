@@ -1,3 +1,6 @@
+using StaticArrays
+using LinearAlgebra
+
 ## -- COOKBOOK (The Registry) --
 # This maps strings in your YAML to Julia functions
 # This is how you implement `drift_rule: "stock_drift_1"`
@@ -6,18 +9,16 @@ if !isdefined(Main, :DRIFT_RULES)
         "stock_drift_1" => function(w::SimulationWorld, p::NamedTuple, n::Int)
             # p is the "Stock_S" block from the pantry
             r_prev = @view w.paths[:r][:, n - 1]
-            π_prev = @view w.paths[:π][:, n - 1]
-            return (p.a .* r_prev .+ p.b .* π_prev .+ p.λ_S * p.σ_S .- 0.5 * p.σ_S^2)
+            return (p.a .* r_prev .+ p.λ_S * p.σ_S .- 0.5 * p.σ_S^2)
         end
-        # Add "stock_drift_2", etc. here if you create new models
     )
 end
 
 if !isdefined(Main, :DIFFUSION_RULES)
     const DIFFUSION_RULES = Dict(
-        "stock_diffusion_1" => function(w::SimulationWorld, p::NamedTuple, shock_index::Int, n::Int)
+        "stock_diffusion_1" => function(w::SimulationWorld, p::NamedTuple, shock_idxs::Vector{Int}, n::Int)
             # p is the "Stock_S" block from the pantry
-            dW_S_n = @view w.brown_shocks[:, n, shock_index]
+            dW_S_n = @view w.brown_shocks[:, n, shock_idxs]
             return p.σ_S .* dW_S_n
         end
     )
@@ -142,17 +143,49 @@ function simulate_brownian_motions(ρ::AbstractMatrix{<:Real}, sim::Int64,
     return dW
 end
 
+"""
+    resolve_shock_indices(shock_input, shock_map::Dict{Symbol, Int})
+
+Converts a YAML input (String or Vector{String}) into a Vector{Int} of indices.
+For example, if you have `shock_map = Dict(:r => 1, :π => 2, :S => 3)`,
+then:
+- `resolve_shock_indices("r", shock_map)` returns `[1]`
+- `resolve_shock_indices(["S", "π"], shock_map)` returns `[3, 2]`
+"""
+function resolve_shock_indices(shock_input, shock_map::Dict{Symbol, Int})
+
+    # Normalize input to a Vector of Strings
+    names = isa(shock_input, Vector) ? String.(shock_input) : [String(shock_input)]
+
+    indices = Int[]
+    for name in names
+        sym = Symbol(name)
+        if !haskey(shock_map, sym)
+            error("Shock name '$name' found in Recipe but not in ShockOrder.")
+        end
+        push!(indices, shock_map[sym])
+    end
+    return indices
+end
+
 # --- "BUILDER" FUNCTIONS ---
 function add_vasicek_process!(
     world::SimulationWorld,
     name::Symbol, # Name to store in paths Dict (e.g., :r or :π)
     params::NamedTuple, # The parameters (κ, θ, σ, initial_value)
-    shock_index::Int # Which column of dW to use?
+    shock_indices::Vector{Int64} # Which column of dW to use?
 )
 
     # Unpack parameters
     (; κ, θ, σ, initial_value) = params
     (; sim, M) = world.sim_params
+
+    # Vasicek is a 1-factor model in this implementation.
+    # We take the first index provided.
+    if length(shock_indices) != 1
+        @warn "Vasicek process '$name' received $(length(shock_indices)) shocks. Using the first one."
+    end
+    shock_index = shock_indices[1]
 
     # Preallocate path matrix
     path = Matrix{Float64}(undef, sim, world.amount_of_time_steps)
@@ -175,11 +208,10 @@ end
 function add_lognormal_process!(
     world::SimulationWorld,
     name::Symbol, # Name to store in paths Dict (e.g., :S)
-    initial_value::Float64,
     params::NamedTuple, # The parameters (μ_func, σ, initial_value)
-    shock_index::Int, # Which column of dW to use?
+    shock_idxs::Vector{Int64}, # Which column of dW to use?
     drift_formula::Function, # The formula for drift
-    diffusion_formula::Function # The "formula" for diffusion
+    diffusion_formula::Function # The formula for diffusion
 )
 
     # Unpack parameters
@@ -187,7 +219,7 @@ function add_lognormal_process!(
 
     # Preallocate path matrix
     path = Matrix{Float64}(undef, sim, world.amount_of_time_steps)
-    path[:, 1] .= initial_value
+    path[:, 1] .= params.initial_value
 
     @views for n in 2:world.amount_of_time_steps
 
@@ -196,10 +228,7 @@ function add_lognormal_process!(
 
         # Compute drift and diffusion
         log_drift = drift_formula(world, params, n)
-        log_diffusion = diffusion_formula(world, params, shock_index, n)
-
-        # Obtain relevant shocks (assuming shock_index is known or passed)
-        dW = world.brown_shocks[:, n, shock_index]
+        log_diffusion = diffusion_formula(world, params, shock_idxs, n)
 
         # Update lognormal process
         G = exp.(log_drift .* world.δt .+ log_diffusion)
@@ -244,7 +273,7 @@ function add_CPI_path!(
         Π_path[:, n] .= Π_path[:, n - 1] .* G_Π
     end
 
-    # 5. Store the result and return
+    # Store the result and return
     world.paths[name] = Π_path
     return world # Allow chaining
 end
@@ -373,11 +402,12 @@ function add_excess_simple_return_path!(
     asset_price_name::Symbol,
     risk_free_rate_name::Symbol = :r
 )
-    # 1. Get parameters and paths
+    # Get parameters and paths
     sim = world.sim_params.sim
     amount_of_time_steps = world.amount_of_time_steps
     δt = world.δt
 
+    # Check that paths exist
     if !haskey(world.paths, asset_price_name)
         error("Asset path ':$asset_price_name' not found in SimulationWorld.")
     end
@@ -385,35 +415,73 @@ function add_excess_simple_return_path!(
         error("Risk-free rate path ':$risk_free_rate_name' not found in SimulationWorld.")
     end
 
+    # Get paths
     price_path = world.paths[asset_price_name]
     rate_path = world.paths[risk_free_rate_name]
 
-    # 2. Preallocate
+    # Preallocate the excess return path
     Re_path = Matrix{Float64}(undef, sim, amount_of_time_steps)
     Re_path[:, 1] .= 0.0  # No return at t=0
 
-    # 3. Calculate returns
+    # Calculate returns
     @inbounds @views for n = 2:amount_of_time_steps
-        # P[n] and P[n-1]
+
+        # Get relevant prices
         price_now = price_path[:, n]
         price_prev = price_path[:, n-1]
-
-        # r[n-1]
         rate_prev = rate_path[:, n-1]
 
         # Calculate simple returns
-        # R_asset = P_now / P_prev
         R_asset = price_now ./ price_prev
-
-        # R_riskfree = 1 + r_prev * δt
         R_riskfree = 1.0 .+ rate_prev .* δt
 
-        # Simple excess return: R_excess = R_asset - R_riskfree
+        # Simple excess return
         Re_path[:, n] .= R_asset .- R_riskfree
     end
 
-    # 4. Store and return
+    # Store and return
     world.paths[return_name] = Re_path
+    return world
+end
+
+
+function add_simple_return_path!(
+    world::SimulationWorld,
+    return_name::Symbol,
+    asset_price_name::Symbol,
+)
+    # Get parameters and paths
+    sim = world.sim_params.sim
+    amount_of_time_steps = world.amount_of_time_steps
+    δt = world.δt
+
+    if !haskey(world.paths, asset_price_name)
+        error("Asset path ':$asset_price_name' not found in SimulationWorld.")
+    end
+
+    price_path = world.paths[asset_price_name]
+
+    # Preallocate the return path
+    R_path = Matrix{Float64}(undef, sim, amount_of_time_steps)
+    R_path[:, 1] .= 1.0  # No return at t=0
+
+
+    # Calculate returns
+    @inbounds @views for n = 2:amount_of_time_steps
+
+        # Get relevant prices
+        price_now = price_path[:, n]
+        price_prev = price_path[:, n-1]
+
+        # Calculate simple returns
+        R_asset = price_now ./ price_prev
+
+        # Simple excess return
+        R_path[:, n] .= R_asset
+    end
+
+    # Store and return
+    world.paths[return_name] = R_path
     return world
 end
 
@@ -429,64 +497,47 @@ constructs the key it expects to find in `Parameters.Correlations`
 """
 function build_correlation_matrix_and_map(config_set::Dict)
 
-    # 1. Get data from config
-    # CRITICAL: These names must EXACTLY match your YAML keys.
-    # e.g., ["r", "π", "S"]
+    # Get data from config
     shock_order_names = config_set["ShockOrder"]
     corr_params = config_set["Parameters"]["Correlations"]
     n_shocks = length(shock_order_names)
-
-    # 2. Create the (name -> index) maps
-    # We use String keys here to match the YAML (e.g., Dict("r" => 1, "π" => 2, "S" => 3))
-    shock_map_str = Dict(name => i for (i, name) in enumerate(shock_order_names))
 
     # Build the matrix
     ρ_matrix = Matrix{Float64}(I, n_shocks, n_shocks) # Start with Identity
 
     # Iterate over all unique pairs (i, j) where i < j
-    for i in 1:n_shocks
-        for j in (i + 1):n_shocks
-            # Get the names for this pair, e.g., "r" and "π"
-            name1 = shock_order_names[i]
-            name2 = shock_order_names[j]
+    for i in 1:n_shocks, j in (i + 1):n_shocks
 
-            # Construct the keys we expect to find
-            key1 = "ρ_" * name1 * name2  # e.g., "ρ_rπ"
-            key2 = "ρ_" * name2 * name1  # e.g., "ρ_πr"
+        # Get the names for this pair, e.g., "r" and "π"
+        name1 = shock_order_names[i]
+        name2 = shock_order_names[j]
 
-            # 2. Find the value in the YAML
-            value = nothing
-            if haskey(corr_params, key1)
-                value = corr_params[key1]
-            elseif haskey(corr_params, key2)
-                value = corr_params[key2]
-            else
-                # This is a missing correlation. We assume 0.
-                @warn "Correlation '$key1' or '$key2' not found in parameters.yaml. Defaulting to 0.0."
-                value = 0.0
-            end
+        # Construct the keys we expect to find
+        key1 = "ρ_" * name1 * name2  # e.g., "ρ_rπ"
+        key2 = "ρ_" * name2 * name1  # e.g., "ρ_πr"
 
-            # 3. Handle sensitivity list (the `find_vector_paths` fix)
-            # If the value is a `Dict` (like `{sensitivity: [0.4, 0.5]}`),
-            # it means we are in a *non-baseline* run.
-            # Your `generate_parameter_sets` will have already replaced
-            # this with a simple value (e.g., 0.4 or 0.5).
-            if value isa Dict
-                # This should only happen if you are running
-                # `generate_parameter_sets` *after* this.
-                # Assuming your loader runs *before* this, `value`
-                # will always be a simple Float (e.g., 0.4 or 0.5).
-                if haskey(value, "sensitivity")
-                     # This logic should be in `load_parameters.jl`,
-                     # so by the time we get here, `value` is just a number.
-                     # We'll assume it is, but we'll check.
-                     error("Correlation parameter '$key1' has not been flattened by the sensitivity loader.")
-                end
-            end
-
-            # 4. Set the value in the matrix
-            ρ_matrix[i, j] = ρ_matrix[j, i] = value
+        # Find the value in the YAML
+        value = nothing
+        if haskey(corr_params, key1)
+            value = corr_params[key1]
+        elseif haskey(corr_params, key2)
+            value = corr_params[key2]
+        else
+            # This is a missing correlation. We assume 0.
+            @warn "Correlation '$key1' or '$key2' not found in parameters.yaml. Defaulting to 0.0."
+            value = 0.0
         end
+
+        # Handle sensitivity list: If the value is a dictionary (like `{sensitivity: [0.4, 0.5]}`)
+        # then we have an error because this should have been flattened already.
+        if (value isa Dict)
+            if haskey(value, "sensitivity")
+                error("Correlation parameter '$key1' has not been flattened by the sensitivity loader.")
+            end
+        end
+
+        # Set the value in the matrix
+        ρ_matrix[i, j] = ρ_matrix[j, i] = value
     end
 
     @assert isposdef(ρ_matrix) "Correlation matrix is not positive definite. Check YAML values."
@@ -498,6 +549,11 @@ function build_correlation_matrix_and_map(config_set::Dict)
 end
 
 ## -- RECIPE EXECUTOR --
+"""
+    build_world_from_recipe(config_set::Dict)
+Builds a `SimulationWorld` from a given configuration set (Dict)
+by executing the "Processes" and "Returns" recipes.
+"""
 function build_world_from_recipe(config_set::Dict)
 
     # Get Data
@@ -505,7 +561,7 @@ function build_world_from_recipe(config_set::Dict)
     pantry = config_set["Parameters"]
     recipe_list = config_set["Processes"]
 
-    # Build Correlation Matrix and Shock Map
+    # Build correlation matrix and shock map
     ρ_matrix, shock_map = build_correlation_matrix_and_map(config_set)
 
     # Create the World
@@ -519,25 +575,38 @@ function build_world_from_recipe(config_set::Dict)
         type = step["type"]
         println("... adding process: $name (type: $type)")
 
+        # Find relevant shock indices
+        current_shock_indices = Int[]
+        if haskey(step, "shocks")
+            current_shock_indices = resolve_shock_indices(step["shocks"], shock_map)
+        end
+
+        # Merge parameters from pantry
+        if isa(step["params_from"], String)
+            params = NamedTuple((Symbol(key), value) for (key, value) in pantry[step["params_from"]])
+        elseif isa(step["params_from"], Vector)
+            merged_params = Dict()
+            for param_key in step["params_from"]
+                merge!(merged_params, pantry[param_key])
+            end
+            params = NamedTuple((Symbol(key), value) for (key, value) in merged_params)
+        else
+            error("Invalid type for 'params_from': $(typeof(step["params_from"]))")
+        end
+
+        # -- Dispatch to appropriate builder --
         if type == "vasicek"
-            params = NamedTuple((Symbol(key),value) for (key,value) in pantry[step["params_from"]])
-            add_vasicek_process!(world, name, params, step["shock_index"])
+            add_vasicek_process!(world, name, params, current_shock_indices)
 
         elseif type == "cpi"
             add_CPI_path!(world, name)
 
         elseif type == "lognormal"
-            params = NamedTuple((Symbol(key),value) for (key,value) in pantry[step["params_from"]])
             drift_func = DRIFT_RULES[step["drift_rule"]]
             diffusion_func = DIFFUSION_RULES[step["diffusion_rule"]]
 
-            add_lognormal_process!(world, name,
-                params.initial_value, # Get init_val from the pantry block
-                params,
-                step["shock_index"],
-                drift_func,
-                diffusion_func
-            )
+            add_lognormal_process!(world, name, params,
+                current_shock_indices, drift_func, diffusion_func)
 
         elseif type == "nominal_bond"
             param_keys = step["params_from"] # ["Vasicek_r", "MPR"]
@@ -564,11 +633,17 @@ function build_world_from_recipe(config_set::Dict)
         end
     end
 
-    # --- E. Execute "Returns" Recipe ---
-    for ret in config_set["Returns"]
+    # Execute "Returns" Recipe
+    for ret in config_set["ExcessReturns"]
         name = Symbol(ret["name"])
         println("... adding return: $name")
         add_excess_simple_return_path!(world, name, Symbol(ret["asset_path"]))
+    end
+
+    for ret in config_set["Returns"]
+        name = Symbol(ret["name"])
+        println("... adding return: $name")
+        add_simple_return_path!(world, name, Symbol(ret["asset_path"]))
     end
 
     println("Simulation complete.")

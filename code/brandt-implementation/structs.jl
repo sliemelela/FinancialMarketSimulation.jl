@@ -64,6 +64,8 @@ A container for the utility function's derivatives.
 (This struct is created by `utils.jl`, not loaded)
 """
 Base.@kwdef struct UtilityFunctions
+    u::Function
     first_derivative::Function
     second_derivative::Function
+    inverse::Function
 end
