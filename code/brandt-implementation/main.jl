@@ -1,11 +1,11 @@
 using CairoMakie
 using Statistics
+using ParameterSets
 using Random
 
 CairoMakie.activate!()
 
 include("structs.jl")
-include("loadParameters.jl")
 include("utils.jl")
 include("simulation.jl")
 include("plotting.jl")
@@ -17,15 +17,21 @@ include("solver.jl")
 function run_full_analysis(config_filename::String)
 
     # Load all config sets
-    config_sets = load_config_sets(config_filename)
-    println("Successfully generated $(length(config_sets)) parameter set(s) to run.")
+    parameter_sets = load_sets(config_filename)
+    println("Successfully generated $(length(parameter_sets)) parameter set(s) to run.")
 
     # Store results
     all_final_policies = []
     all_worlds = []
+    results = Dict{Int, Dict{String, Any}}()
 
-    for (i, config_set) in enumerate(config_sets)
-        println("\n--- RUNNING ANALYSIS FOR SET $i/$(length(config_sets)) ---")
+    for parameter_set in parameter_sets
+
+        # Extract config
+        config_set = parameter_set.config
+        i = parameter_set.id
+
+        println("\n--- RUNNING ANALYSIS FOR SET $i/$(length(parameter_sets)) ---")
 
         # Load the solver struct
         solver_params_dict = config_set["SolverParams"]
@@ -52,11 +58,22 @@ function run_full_analysis(config_filename::String)
         plot_policy(world, solver_params, ω_l)
 
         # Calculate the value function and certainty equivalent wealth
-        save_value_and_CE_to_csv(i, world, solver_params, ω_l, my_utility)
+        for W_1 in config_set["SolverParams"]["W_grid"]
+            J_W1, CE_1 = calculate_expected_utility(world, solver_params, ω_l, 1, W_1, nothing, my_utility)
+            if !haskey(results, parameter_set.id)
+                results[parameter_set.id] = Dict{String, Any}()
+            end
+            merge!(results[parameter_set.id], Dict(
+                "J_W at W_1: $W_1" => J_W1,
+                "CE at W_1: $W_1" => CE_1
+            ))
+        end
     end
 
+    save_sensitivity_reports(parameter_sets, results)
     return all_worlds, all_final_policies
 end
 
-run_full_analysis("parameters.yaml")
+config_path = joinpath(@__DIR__, "parameters.yaml")
+run_full_analysis(config_path)
 nothing

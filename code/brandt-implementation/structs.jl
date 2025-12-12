@@ -69,3 +69,35 @@ Base.@kwdef struct UtilityFunctions
     second_derivative::Function
     inverse::Function
 end
+
+"""
+    load_struct(::Type{T}, data::Dict) where {T}
+
+Constructs an instance of a given struct type `T` from a dictionary.
+"""
+function load_struct(::Type{T}, data::Dict) where {T}
+    field_names = fieldnames(T)
+    values_ordered = [
+        begin
+            # Use `get` for a better error message
+            key = string(f)
+            if !haskey(data, key)
+                error("Missing key '$key' in YAML for struct $T")
+            end
+            val = data[key]
+
+            expected_type = fieldtype(T, f)
+
+            # Handle `null` in YAML mapping to `nothing` in Julia
+            if val === nothing && expected_type >: Nothing
+                nothing
+            elseif expected_type == Symbol
+                Symbol(val)
+            else
+                # Use `convert` for flexibility (e.g., Int64 in YAML to Float64 in struct)
+                convert(expected_type, val)
+            end
+        end for f in field_names
+    ]
+    return T(values_ordered...)
+end

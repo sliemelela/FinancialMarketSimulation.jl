@@ -3,8 +3,8 @@
 # -----------------
 SimulationParams:
   sim: 10000
-  T: 4.0
-  M: 4.0
+  T: 10.0
+  M: 50.0
 
 # -----------------
 # 2. SHOCK DEFINITION
@@ -23,14 +23,14 @@ Parameters:
   Vasicek_r:
     κ: 0.3
     θ: 0.05
-    σ: 0.02
+    σ: 0.00
     initial_value: 0.05
 
   Vasicek_pi:
-    κ: 0.5
-    θ: 0.02
-    σ: 0.01
-    initial_value: 0.02
+    κ: 0.0
+    θ: 0.00
+    σ: 0.00
+    initial_value: 0.00
 
   Stock_S:
     a: 1.0
@@ -103,7 +103,8 @@ SolverParams:
   asset_names: ["Re_Stock"]
   state_names: ["r"]
   W_grid: [50.0, 75.0, 100.0, 125.0, 150.0]
-  poly_order: 2
+  poly_order: 1
   p_income: 0.0
   O_t_real_path: null
-  γ: 5.0
+  γ:
+    sensitivity: [5.0, 6.0, 7.0]
