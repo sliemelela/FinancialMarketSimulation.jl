@@ -60,6 +60,7 @@ function run_full_analysis(config_filename::String)
         # Calculate the value function and certainty equivalent wealth
         for W_1 in config_set["SolverParams"]["W_grid"]
             J_W1, CE_1 = calculate_expected_utility(world, solver_params, ω_l, 1, W_1, nothing, my_utility)
+
             if !haskey(results, parameter_set.id)
                 results[parameter_set.id] = Dict{String, Any}()
             end
@@ -74,6 +75,6 @@ function run_full_analysis(config_filename::String)
     return all_worlds, all_final_policies
 end
 
-config_path = joinpath(@__DIR__, "parameters.yaml")
-run_full_analysis(config_path)
-nothing
+# config_path = joinpath(@__DIR__, "parameters.yaml")
+# run_full_analysis(config_path)
+# nothing
