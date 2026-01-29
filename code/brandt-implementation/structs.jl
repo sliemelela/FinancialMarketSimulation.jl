@@ -32,6 +32,7 @@ Base.@kwdef struct SolverParams
     max_taylor_order::Int
     p_income::Float64
     O_t_real_path::Union{String, Nothing}
+    trimming_α::Float64
     γ::Float64
 end
 
@@ -112,4 +113,24 @@ function load_struct(::Type{T}, data::Dict) where {T}
         end for f in field_names
     ]
     return T(values_ordered...)
+end
+
+
+"""
+Abstract parent type for all regression strategies.
+"""
+abstract type RegressionStrategy end
+
+"""
+Standard Ordinary Least Squares.
+Fastest method. Uses QR factorization.
+"""
+struct StandardOLS <: RegressionStrategy end
+
+"""
+Trimmed OLS (robust to outliers).
+Removes the top and bottom α probability mass before regressing.
+"""
+struct TrimmedOLS <: RegressionStrategy
+    α::Float64
 end

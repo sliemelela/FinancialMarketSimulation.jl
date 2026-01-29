@@ -107,4 +107,5 @@ SolverParams:
   max_taylor_order: 4
   p_income: 0.0
   O_t_real_path: null
+  trimming_α: 0.05
   γ: 5.0
