@@ -1,3 +1,13 @@
+using StaticArrays
+
+# -- Aliases for dimensions
+const SimVec      = Vector{Float64}   # Size: (sim,)
+const AssetVec    = Vector{Float64}   # Size: (N,), where where N is amount of assets.
+const SimTimeMat  = Matrix{Float64}   # Size: (sim x Time)
+const SimAssetMat = Matrix{Float64}   # Size: (sim x N), where where N is amount of assets.
+const AssetSV     = SVector           # Size: (N,), where N is amount of assets.
+const SimTimeSV   = Matrix{<:AssetSV} # Size: (Sims x Time) of AssetSV vectors each entry
+
 # --- Structs loaded from YAML ---
 
 """
@@ -19,6 +29,7 @@ Base.@kwdef struct SolverParams
     state_names::Vector{String}
     W_grid::Vector{Float64}
     poly_order::Int
+    max_taylor_order::Int
     p_income::Float64
     O_t_real_path::Union{String, Nothing}
     γ::Float64
@@ -52,7 +63,7 @@ Base.@kwdef struct SimulationWorld
         dW = simulate_brownian_motions(ρ, sim, amount_of_time_steps, sqrt_δt)
 
         # Initialize empty paths Dict
-        paths = Dict{Symbol, Matrix{Float64}}()
+        paths = Dict{Symbol, SimTimeMat}()
 
         new(sim_params, dW, paths, δt, amount_of_time_steps)
     end
@@ -65,8 +76,9 @@ A container for the utility function's derivatives.
 """
 Base.@kwdef struct UtilityFunctions
     u::Function
-    first_derivative::Function
-    second_derivative::Function
+    first_derivative::Function   # Keep for backward compatibility
+    second_derivative::Function  # Keep for backward compatibility
+    nth_derivative::Function     # The cached accessor function
     inverse::Function
 end
 

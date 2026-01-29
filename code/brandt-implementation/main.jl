@@ -75,6 +75,6 @@ function run_full_analysis(config_filename::String)
     return all_worlds, all_final_policies
 end
 
-# config_path = joinpath(@__DIR__, "parameters.yaml")
-# run_full_analysis(config_path)
-# nothing
+config_path = joinpath(@__DIR__, "parameters.yaml")
+run_full_analysis(config_path)
+nothing
