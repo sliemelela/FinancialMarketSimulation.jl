@@ -6,12 +6,9 @@ using Random
 CairoMakie.activate!()
 
 include("structs.jl")
-include("utils.jl")
 include("simulation.jl")
 include("plotting.jl")
-include("diagnostics.jl")
-include("connectors.jl")
-include("solver.jl")
+
 
 
 function run_full_analysis(config_filename::String)

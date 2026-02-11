@@ -1,0 +1,7 @@
+# Julia
+/Manifest*.toml
+
+# General
+.DS_Store
+.AppleDouble
+.LSOverride
