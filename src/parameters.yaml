@@ -1,0 +1,111 @@
+# -----------------
+# 1. SIMULATION GRID
+# -----------------
+SimulationParams:
+  sim: 10000
+  T: 1.0
+  M: 10.0
+
+# -----------------
+# 2. SHOCK DEFINITION
+# -----------------
+ShockOrder: ["r", "π", "S"]
+
+# -----------------
+# 3. PARAMETER "PANTRY"
+# -----------------
+Parameters:
+  Correlations:
+      ρ_rπ: 0.0
+      ρ_rS: 0.0
+      ρ_πS: 0.0
+
+  Vasicek_r:
+    κ: 0.3
+    θ: 0.05
+    σ: 0.02
+    initial_value: 0.05
+
+  Vasicek_pi:
+    κ: 0.0
+    θ: 0.00
+    σ: 0.00
+    initial_value: 0.00
+
+  Stock_S:
+    a: 1.0
+    b: 0.0
+    σ_S: 0.20
+    λ_S: 0.25
+    initial_value: 100.0
+
+  MPR: # Market Price of Risk Factors
+    ϕ_r: -0.1
+    ϕ_π: -0.1
+    ϕ_S: -0.2
+
+# -----------------
+# 4. MODEL "RECIPE" (GENERAL)
+#    A list of processes to build.
+# -----------------
+Processes:
+  - name: "r"
+    type: "vasicek"
+    params_from: "Vasicek_r"
+    shocks: "r"
+
+  - name: "π"
+    type: "vasicek"
+    params_from: "Vasicek_pi"
+    shocks: "π"
+
+  - name: "Π"
+    params_from: "Vasicek_pi"
+    type: "cpi"
+    # No params, depends on :pi which must be built first
+
+  - name: "S"
+    type: "lognormal"
+    params_from: "Stock_S"
+    shocks: "S"
+    drift_rule: "stock_drift_1"
+    diffusion_rule: "stock_diffusion_1"
+
+  - name: "P_N"
+    type: "nominal_bond"
+    # This process needs multiple parameter blocks
+    params_from: ["Vasicek_r", "MPR", "Correlations"]
+
+  - name: "P_I"
+    type: "inflation_bond"
+    params_from: ["Vasicek_r", "Vasicek_pi", "MPR", "Correlations"]
+
+# -----------------
+# 5. RETURNS & SOLVER CONFIG
+# -----------------
+ExcessReturns:
+  - name: "Re_NominalBond"
+    asset_path: "P_N"
+  - name: "Re_InflBond"
+    asset_path: "P_I"
+  - name: "Re_Stock"
+    asset_path: "S"
+
+Returns:
+  - name: "R_NominalBond"
+    asset_path: "P_N"
+  - name: "R_InflBond"
+    asset_path: "P_I"
+  - name: "R_Stock"
+    asset_path: "S"
+
+SolverParams:
+  asset_names: ["Re_Stock"]
+  state_names: ["r"]
+  W_grid: [50.0, 75.0, 100.0, 125.0, 150.0]
+  poly_order: 5
+  max_taylor_order: 4
+  p_income: 0.0
+  O_t_real_path: null
+  trimming_α: 0.05
+  γ: 5.0
