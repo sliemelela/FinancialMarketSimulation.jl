@@ -1,4 +1,5 @@
 using FinancialMarketSimulation
+using Statistics
 using Test
 
 @testset "Correlated & Multi-Shock Simulation" begin
