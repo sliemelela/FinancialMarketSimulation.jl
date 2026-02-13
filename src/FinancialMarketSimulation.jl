@@ -2,7 +2,9 @@ module FinancialMarketSimulation
 
 using LinearAlgebra
 using Statistics
+
 using ComponentArrays
+
 
 # 1. Export Nouns (Types)
 export MarketConfig, SimulationWorld
