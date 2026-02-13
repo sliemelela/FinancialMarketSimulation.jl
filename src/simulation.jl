@@ -1,6 +1,3 @@
-using ComponentArrays
-using LinearAlgebra
-
 """
     simulate_correlated_shocks(sims, steps, dt, corr_matrix)
 

@@ -1,7 +1,6 @@
 module FinancialMarketSimulation
 
 using LinearAlgebra
-using StaticArrays
 using Statistics
 using ComponentArrays
 
