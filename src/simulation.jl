@@ -43,7 +43,9 @@ function build_world(config::MarketConfig)
 
     # --- 2. GENERATE SHOCKS ---
     # Determine required number of shocks
-    max_idx = maximum(maximum(shock_indices(p)) for p in config.processes)
+    # Iterators.flatten creates a lazy view of all indices from all processes.
+    # init=0 ensures that if the collection is empty (e.g., only bonds), we get 0 instead of an error.
+    max_idx = maximum(Iterators.flatten(shock_indices(p) for p in config.processes); init=0)
 
     # Handle Correlation Matrix
     ρ = config.correlations

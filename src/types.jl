@@ -53,9 +53,38 @@ struct VasicekProcess <: AbstractMarketProcess
 end
 shock_indices(p::VasicekProcess) = p.shock_idx
 
+"""
+    NominalBondProcess{R}
+
+Holds reference to the Rate Process and a vector of Market Risk Factors.
+"""
+struct NominalBondProcess{R <: AbstractMarketProcess} <: AbstractMarketProcess
+    name::Symbol
+    rate_process::R
+
+    # Vector of Market Prices of Risk [ϕ_1, ϕ_2, ..., ϕ_N]
+    # Corresponding to the shock indices 1, 2, ..., N
+    market_risk_factors::Vector{Float64}
+end
+shock_indices(::NominalBondProcess) = Int[]
+
+"""
+    InflationBondProcess{R, I}
+
+Holds reference to Rate, Inflation, and a vector of Market Risk Factors.
+"""
+struct InflationBondProcess{R <: AbstractMarketProcess, I <: AbstractMarketProcess} <: AbstractMarketProcess
+    name::Symbol
+    rate_process::R
+    infl_process::I
+    cpi_name::Symbol
+
+    market_risk_factors::Vector{Float64}
+end
+shock_indices(::InflationBondProcess) = Int[]
+
 
 # --- Configuration ---
-
 """
     MarketConfig
 
