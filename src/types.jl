@@ -90,6 +90,32 @@ struct InflationBondProcess{R <: AbstractMarketProcess, I <: AbstractMarketProce
 end
 shock_indices(::InflationBondProcess) = Int[]
 
+# --- Return Processes ---
+
+"""
+    SimpleReturnProcess
+
+Calculates the simple (discrete) return of an asset:
+R_t = (S_t / S_{t-1}) - 1
+"""
+struct SimpleReturnProcess <: AbstractMarketProcess
+    name::Symbol
+    asset_name::Symbol  # The asset to track (e.g., :S)
+end
+shock_indices(::SimpleReturnProcess) = Int[] # Deterministic transformation
+
+"""
+    ExcessReturnProcess
+
+Calculates the excess return of an asset over a risk-free rate:
+Re_t = (S_t / S_{t-1} - 1) - (r_{t-1} * dt)
+"""
+struct ExcessReturnProcess <: AbstractMarketProcess
+    name::Symbol
+    asset_name::Symbol # The risky asset (e.g. :S)
+    rate_name::Symbol  # The short rate (e.g. :r)
+end
+shock_indices(::ExcessReturnProcess) = Int[]
 
 # --- Configuration ---
 """
