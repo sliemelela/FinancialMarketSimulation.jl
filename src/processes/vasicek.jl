@@ -1,5 +1,3 @@
-# src/processes/vasicek.jl
-
 """
     simulate!(storage, process::VasicekProcess, world)
 

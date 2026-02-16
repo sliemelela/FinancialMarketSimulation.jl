@@ -1,5 +1,3 @@
-using ComponentArrays
-
 # --- Abstract Types ---
 abstract type AbstractMarketProcess end
 

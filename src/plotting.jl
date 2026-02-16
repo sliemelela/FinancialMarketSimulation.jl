@@ -1,167 +1,144 @@
-# plotting.jl
-
-using GLMakie
+using CairoMakie
 using Statistics
+using Printf
 
 # ==============================================================================
-# 1. LOW-LEVEL PLOTTING KERNELS (Generic)
+# 1. HELPERS
 # ==============================================================================
 
-function _core_plot_paths!(ax, t, data::AbstractMatrix; count::Int=20, color=(:blue, 0.1))
+"""
+Calculates the indices in the data array corresponding to the requested time range.
+"""
+function get_time_indices(config::MarketConfig, time_range::Tuple{Real, Real})
+    t_start, t_end = time_range
+    dt = config.dt
+
+    idx_start = floor(Int, t_start / dt) + 1
+    idx_end   = floor(Int, t_end / dt) + 1
+
+    idx_start = max(1, idx_start)
+    idx_end   = min(config.M + 1, idx_end)
+
+    return idx_start:idx_end
+end
+
+"""
+Calculates the single index corresponding to a specific time.
+"""
+function get_time_index(config::MarketConfig, t::Real)
+    idx = floor(Int, t / config.dt) + 1
+    return clamp(idx, 1, config.M + 1)
+end
+
+# ==============================================================================
+# 2. CORE PLOTTING KERNELS
+# ==============================================================================
+
+function plot_paths_kernel!(ax, times, data::AbstractMatrix; count::Int=20, color=(:blue, 0.1))
     sim_count = size(data, 1)
     n_plot = min(sim_count, count)
     path_indices = rand(1:sim_count, n_plot)
 
-    @views for i in path_indices
-        lines!(ax, t, data[i, :], color=color)
+    for i in path_indices
+        lines!(ax, times, data[i, :], color=color)
     end
 end
 
-function _core_plot_mean_ci!(ax, t, data::AbstractMatrix; show_ci=true, mean_color=:black, ci_color=(:black, 0.2))
+function plot_mean_ci_kernel!(ax, times, data::AbstractMatrix; mean_color=:black, ci_color=(:black, 0.2))
     mean_path = vec(mean(data, dims=1))
-    if show_ci
-        q_low = [quantile(col, 0.05) for col in eachcol(data)]
-        q_high = [quantile(col, 0.95) for col in eachcol(data)]
-        band!(ax, t, q_low, q_high, color=ci_color, label="90% C.I.")
-    end
-    lines!(ax, t, mean_path, color=mean_color, linewidth=2, label="Mean")
-end
+    q_low     = [quantile(col, 0.05) for col in eachcol(data)]
+    q_high    = [quantile(col, 0.95) for col in eachcol(data)]
 
+    band!(ax, times, q_low, q_high, color=ci_color, label="90% C.I.")
+    lines!(ax, times, mean_path, color=mean_color, linewidth=2, label="Mean")
+end
 
 # ==============================================================================
-# 2. INTERFACE A: SIMULATION WORLD
+# 3. HIGH-LEVEL FUNCTIONS
 # ==============================================================================
 
-function plot_makie_paths!(
-    fig::Figure, ax::Axis,
-    world::SimulationWorld, name::Symbol;
-    count::Int=20, color=(:blue, 0.1)
-)
-    if !haskey(world.paths, name)
-        error("Path ':$name' not found in SimulationWorld.")
+"""
+    plot_simulation(world; ...)
+
+Plots simulation results with flexible options.
+
+# Arguments
+- `vars`: List of symbols to plot (e.g. `[:r, :S]`). Defaults to all.
+- `time_range`: Tuple (start, end) for the trajectory x-axis.
+- `output_dir`: Folder to save plots.
+- `plot_traj`: Bool, show trajectories (default true).
+- `plot_dist`: Bool, show distribution histogram (default true).
+- `dist_time`: Real, specific time for the histogram. Defaults to `time_range[2]`.
+"""
+function plot_simulation(world::SimulationWorld;
+                         vars::Vector{Symbol}=Symbol[],
+                         time_range::Tuple{Real, Real}=(0.0, world.config.T),
+                         output_dir::String="plots",
+                         samples::Int=50,
+                         # New Control Arguments
+                         plot_traj::Bool=true,
+                         plot_dist::Bool=true,
+                         dist_time::Union{Real, Nothing}=nothing)
+
+    if !isdir(output_dir)
+        mkdir(output_dir)
     end
 
-    data = world.paths[name]
-    t = 0:world.δt:world.sim_params.T
-
-    _core_plot_paths!(ax, t, data; count=count, color=color)
-    return fig, ax
-end
-
-function plot_makie_mean_path!(
-    fig::Figure, ax::Axis,
-    world::SimulationWorld, name::Symbol;
-    show_ci::Bool=true, mean_color=:black, ci_color=(:black, 0.2)
-)
-    data = world.paths[name]
-    t = 0:world.δt:world.sim_params.T
-
-    _core_plot_mean_ci!(ax, t, data; show_ci=show_ci, mean_color=mean_color, ci_color=ci_color)
-    return fig, ax
-end
-
-
-# ==============================================================================
-# 3. HIGH-LEVEL ORCHESTRATION
-# ==============================================================================
-
-function plot_world_paths(world::SimulationWorld)
-    println("Generating Market Asset plots...")
-
-    paths_to_plot = [
-        (:P_N, "Nominal Bond Price P_N(t, T)", "Price", "nominal_bond_plot.png", (:green, 0.05)),
-        (:S, "Stock Price S(t)", "Price", "stock_price_plot.png", (:blue, 0.05)),
-        (:r, "Short Rate r(t)", "Short Rate", "short_rate_plot.png", (:cyan, 0.05)),
-        (:Re_Stock, "Excess Simple Return Stock", "Excess Return", "excess_return_stock_plot.png", (:magenta, 0.05)),
-        (:Re_NominalBond, "Excess Simple Return Bond", "Excess Return", "excess_return_bond_plot.png", (:brown, 0.05)),
-        (:Re_InflationBond, "Excess Simple Return Inflation Bond", "Excess Return", "excess_return_inflation_bond_plot.png", (:brown, 0.05)),
-        (:R_Stock, "Simple return Stock", "Return", "simple_return_stock_plot.png", (:blue, 0.05)),
-        (:R_NominalBond, "Simple return Bond", "Return", "simple_return_bond_plot.png", (:green, 0.05)),
-        (:R_InflationBond, "Simple return Inflation Bond", "Return", "simple_return_inflation_bond_plot.png", (:green, 0.05)),
-    ]
-
-    for (path_name, title_str, ylabel_str, filename, color) in paths_to_plot
-        if !haskey(world.paths, path_name)
-            continue
-        end
-
-        fig = Figure(size = (800, 800))
-
-        ax_paths = Axis(fig[1, 1], title = "$title_str (T=$(world.sim_params.T))", ylabel = ylabel_str)
-        plot_makie_paths!(fig, ax_paths, world, path_name, count=100, color=color)
-        plot_makie_mean_path!(fig, ax_paths, world, path_name, mean_color=:black)
-
-        ax_hist = Axis(fig[2, 1], title = "Distribution at T - δt", xlabel = ylabel_str)
-        end_values = world.paths[path_name][:, end - 1]
-        hist!(ax_hist, end_values, bins=50, color=color[1], strokewidth=1, strokecolor=:black)
-
-        save(filename, fig)
-    end
-end
-
-function plot_policy(world::SimulationWorld, solver_params, ω_l)
-
-    t_list = 1:(world.sim_params.M)
-    for t_to_plot in t_list
-        println("Generating final policy plot for t=$t_to_plot...")
-
-        policy_at_t = ω_l[t_to_plot] # Get the (sim,) vector of functions
-
-        # Evaluate each function on the W_grid
-        sim = world.sim_params.sim
-        N_assets = length(solver_params.asset_names)
-        W_grid = solver_params.W_grid
-        policy_on_grid = Matrix{SVector{N_assets, Float64}}(undef, sim, length(W_grid))
-
-        for i in 1:sim, (j, W) in enumerate(W_grid)
-            policy_on_grid[i, j] = policy_at_t[i](W)
-        end
-
-        # Calculate the mean policy at each grid point
-        mean_policy_per_W = [mean(policy_on_grid[:, j]) for j in 1:length(W_grid)]
-
-        # Create the final plot
-        fig_policy = Figure(size = (800, 600))
-        ax_policy = Axis(fig_policy[1, 1],
-            title = "Mean Optimal Policy ω(W) at t=$t_to_plot",
-            xlabel = "Wealth (W)",
-            ylabel = "Policy Weight"
-        )
-
-        # --- DYNAMIC ASSET LOOP ---
-        for k in 1:N_assets
-            # Extract the k-th weight component for every grid point
-            mean_pol_asset_k = [v[k] for v in mean_policy_per_W]
-
-            # Plot with automatic color cycling
-            lines!(ax_policy, W_grid, mean_pol_asset_k,
-                   label=String(solver_params.asset_names[k]),
-                   linewidth=2)
-        end
-        # ---------------------------
-
-        axislegend(ax_policy, position=:rt)
-
-        save("optimal_policy_t$t_to_plot.png", fig_policy)
-
+    if isempty(vars)
+        vars = [k for k in keys(world.paths) if isa(getproperty(world.paths, k), AbstractMatrix)]
     end
 
+    # 1. Prepare Time Slices for Trajectories
+    idxs_traj = get_time_indices(world.config, time_range)
+    full_time_grid = range(0, world.config.T, length=world.config.M+1)
+    t_slice = full_time_grid[idxs_traj]
 
+    # 2. Prepare Index for Distribution
+    # If dist_time is not provided, default to the end of the trajectory window
+    t_dist_target = isnothing(dist_time) ? time_range[2] : dist_time
+    idx_dist = get_time_index(world.config, t_dist_target)
 
-end
+    # Snap actual time for the title
+    t_dist_actual = full_time_grid[idx_dist]
 
-function save_value_and_CE_to_csv(i, world, solver_params, ω_l, my_utility)
-    println("Calculating value function and certainty equivalent wealth...")
-    open("value_function_set_$i.csv", "w") do io
-            println(io, "==================================================")
-            println(io, "METRICS REPORT: $i")
-            println(io, "==================================================")
-            println(io, "")
-            println(io, "Wealth,J_star,CE_star")
-            for W_1 in solver_params.W_grid
-                J_W1, CE_1 = calculate_expected_utility(world, solver_params, ω_l, 1, W_1, nothing, my_utility)
-                println(io, "$W_1,$J_W1,$CE_1")
-            end
+    println("Generating plots...")
+    println("  > Trajectory Range: $time_range")
+    println("  > Distribution Time: $t_dist_actual")
+
+    for name in vars
+        data_full = getproperty(world.paths, name)
+
+        # Configure Layout based on what we are plotting
+        if plot_traj && plot_dist
+            fig = Figure(size = (1000, 500))
+            ax_traj = CairoMakie.Axis(fig[1, 1], title="$name Trajectories", xlabel="Time", ylabel=String(name))
+            ax_dist = CairoMakie.Axis(fig[1, 2], title="Distribution at t=$(round(t_dist_actual, digits=2))", xlabel=String(name))
+        elseif plot_traj
+            fig = Figure(size = (800, 600))
+            ax_traj = CairoMakie.Axis(fig[1, 1], title="$name Trajectories", xlabel="Time", ylabel=String(name))
+        elseif plot_dist
+            fig = Figure(size = (600, 400))
+            ax_dist = CairoMakie.Axis(fig[1, 1], title="$name Dist (t=$(round(t_dist_actual, digits=2)))", xlabel=String(name))
+        else
+            error("Nothing to plot! Set plot_traj or plot_dist to true.")
         end
-    println("All tasks complete. Final policy plot saved.")
+
+        # --- Draw Trajectories ---
+        if plot_traj
+            data_slice = data_full[:, idxs_traj]
+            plot_paths_kernel!(ax_traj, t_slice, data_slice; count=samples, color=(:blue, 0.15))
+            plot_mean_ci_kernel!(ax_traj, t_slice, data_slice)
+        end
+
+        # --- Draw Distribution ---
+        if plot_dist
+            # We take the column corresponding to dist_time
+            dist_data = data_full[:, idx_dist]
+            hist!(ax_dist, dist_data, bins=50, color=:cornflowerblue, strokewidth=1, strokecolor=:black)
+        end
+
+        fname = joinpath(output_dir, "$(name)_plot.png")
+        save(fname, fig)
+        println("  Saved $fname")
+    end
 end

@@ -4,23 +4,27 @@ using LinearAlgebra
 using Statistics
 using Random
 using ComponentArrays
+using CairoMakie
+using Statistics
+using Printf
 
-# 1. Export Nouns (Types)
+# Export Nouns (Types)
 export MarketConfig, SimulationWorld
 export AbstractMarketProcess, GenericSDEProcess, VasicekProcess
 export NominalBondProcess, InflationBondProcess
 export SimpleReturnProcess, ExcessReturnProcess
 
-# 2. Export Verbs (Functions)
+# Export Verbs (Functions)
 export build_world, simulate!
+export plot_simulation
 
-# 3. Include Logic
+# Include Logic
 include("types.jl")
 include("simulation.jl")
 include("processes/generic.jl")
 include("processes/vasicek.jl")
 include("processes/bonds.jl")
 include("processes/returns.jl")
-# include("plotting.jl") # Keep this if you want plotting inside the package
+include("plotting.jl")
 
 end

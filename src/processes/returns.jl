@@ -1,5 +1,3 @@
-# src/processes/returns.jl
-
 """
 Simulate Simple Returns.
 R_t = S_t / S_{t-1} - 1
