@@ -5,7 +5,6 @@ using Statistics
 using Random
 using ComponentArrays
 
-
 # 1. Export Nouns (Types)
 export MarketConfig, SimulationWorld
 export AbstractMarketProcess, GenericSDEProcess, VasicekProcess, NominalBondProcess, InflationBondProcess

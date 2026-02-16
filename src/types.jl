@@ -24,18 +24,25 @@ end
 # --- Process Definitions ---
 
 """
-    GenericSDEProcess
+    GenericSDEProcess{F1, F2}
 
-A flexible SDE process: dX_t = μ(t, X_t)dt + σ(t, X_t)dW_t.
-The drift and diffusion are standard Julia functions provided by the user.
-We parameterize F1 and F2 to ensure high-performance inlining of the functions.
+A flexible SDE process: dX_t = μ(t, X_t, deps...)dt + σ(t, X_t, deps...) ⋅ dW_t.
+Now supports `dependencies`: a list of other process names (symbols) whose values
+will be passed to the drift/diffusion functions.
 """
 struct GenericSDEProcess{F1, F2} <: AbstractMarketProcess
     name::Symbol
-    drift::F1      # Signature: (t, x) -> Float64
-    diffusion::F2  # Signature: (t, x) -> Float64
+    drift::F1
+    diffusion::F2
     initial_value::Float64
     shock_idxs::Vector{Int}
+    "List of dependencies (e.g. [:r, :pi])"
+    dependencies::Vector{Symbol}
+end
+
+# Backward-compatible constructor (defaults to no dependencies)
+function GenericSDEProcess(name, drift, diff, val, shocks)
+    return GenericSDEProcess(name, drift, diff, val, shocks, Symbol[])
 end
 
 """
