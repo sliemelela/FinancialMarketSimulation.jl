@@ -1,0 +1,6 @@
+[deps]
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+FinancialMarketSimulation = "873f78ff-6396-4785-a014-dd5df8284ed2"
+
+[sources]
+FinancialMarketSimulation = {path = ".."}

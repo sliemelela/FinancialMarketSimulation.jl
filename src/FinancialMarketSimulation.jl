@@ -7,6 +7,7 @@ using ComponentArrays
 using CairoMakie
 using Statistics
 using Printf
+using DocStringExtensions
 
 # Export Nouns (Types)
 export MarketConfig, SimulationWorld

@@ -47,6 +47,9 @@ end
     VasicekProcess
 
 A specialized Ornstein-Uhlenbeck process: dr_t = κ(θ - r_t)dt + σ dW_t
+
+# Fields
+$(TYPEDFIELDS)
 """
 struct VasicekProcess <: AbstractMarketProcess
     name::Symbol
