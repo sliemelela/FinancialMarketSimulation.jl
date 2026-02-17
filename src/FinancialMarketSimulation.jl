@@ -6,7 +6,6 @@ using Random
 using ComponentArrays
 using CairoMakie
 using Statistics
-using Printf
 using DocStringExtensions
 
 # Export Nouns (Types)
