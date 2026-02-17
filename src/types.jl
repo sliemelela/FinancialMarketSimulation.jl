@@ -124,15 +124,69 @@ shock_indices(::ExcessReturnProcess) = Int[]
 
 The master configuration for the simulation.
 """
-Base.@kwdef struct MarketConfig
+struct MarketConfig
     sims::Int
     T::Float64
     dt::Float64
     M::Int
     processes::Vector{AbstractMarketProcess}
+    correlations::Matrix{Float64}
+end
 
-    # Optional correlation matrix (defaults to Identity if missing)
-    correlations::Matrix{Float64} = Matrix{Float64}(I, 0, 0)
+# Smart Outer Constructor
+function MarketConfig(;
+    sims::Int,
+    processes::Vector{<:AbstractMarketProcess},
+    correlations::AbstractMatrix{Float64} = Matrix{Float64}(I, 0, 0),
+    T::Union{Real, Nothing} = nothing,
+    dt::Union{Real, Nothing} = nothing,
+    M::Union{Int, Nothing} = nothing
+)
+    # Validate input
+    inputs = (T, dt, M)
+    provided_count = count(!isnothing, inputs)
+
+    if provided_count < 2
+        error("MarketConfig: You must provide at least two of T, dt, and M.")
+    end
+    if provided_count == 3
+        if abs(T - M * dt) > 1e-9
+            error("MarketConfig: All of T, dt, and M are provided but inconsistent.")
+        end
+    end
+
+    # Filling missing values
+    local _T, _dt, _M
+
+    if !isnothing(T) && !isnothing(dt)
+        # Case 1: Have T, dt -> Calculate M
+        _T  = Float64(T)
+        _dt = Float64(dt)
+        _M  = round(Int, _T / _dt)
+
+        # Consistency check (optional warning)
+        if abs(_T - _M * _dt) > 1e-9
+            @warn "MarketConfig: T ($_T) is not a perfect multiple of dt ($_dt). Actual horizon will be $(_M * _dt)."
+        end
+
+    elseif !isnothing(T) && !isnothing(M)
+        # Case 2: Have T, M -> Calculate dt
+        _T  = Float64(T)
+        _M  = Int(M)
+        _dt = _T / _M
+
+    elseif !isnothing(dt) && !isnothing(M)
+        # Case 3: Have dt, M -> Calculate T
+        _dt = Float64(dt)
+        _M  = Int(M)
+        _T  = _dt * _M
+
+    else
+        # Case 4: All 3 provided? Just take them
+        _T, _dt, _M = Float64(T), Float64(dt), Int(M)
+    end
+
+    return MarketConfig(sims, _T, _dt, _M, processes, correlations)
 end
 
 # --- The World ---
