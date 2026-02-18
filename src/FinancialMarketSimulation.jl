@@ -12,7 +12,7 @@ using DocStringExtensions
 export MarketConfig, SimulationWorld
 export AbstractMarketProcess, GenericSDEProcess, VasicekProcess
 export NominalBondProcess, InflationBondProcess
-export SimpleReturnProcess, ExcessReturnProcess
+export SimpleReturnProcess, ExcessReturnProcess, GrossReturnProcess
 
 # Export Verbs (Functions)
 export build_world, simulate!

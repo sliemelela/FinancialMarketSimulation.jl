@@ -106,6 +106,18 @@ end
 shock_indices(::SimpleReturnProcess) = Int[] # Deterministic transformation
 
 """
+    GrossReturnProcess
+
+Calculates the gross return (price relative) of an asset:
+G_t = S_t / S_{t-1}
+"""
+struct GrossReturnProcess <: AbstractMarketProcess
+    name::Symbol
+    asset_name::Symbol
+end
+shock_indices(::GrossReturnProcess) = Int[]
+
+"""
     ExcessReturnProcess
 
 Calculates the excess return of an asset over a risk-free rate:

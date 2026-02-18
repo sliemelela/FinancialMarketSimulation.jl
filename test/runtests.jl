@@ -148,7 +148,7 @@ using Test
 
     # 3. Derivatives (Bonds)
     nom_bond = NominalBondProcess(:P_N, r_model, mprs)
-    infl_bond = InflationBondProcess(:P_I, r_model, pi_model, :CPI, mprs   )
+    infl_bond = InflationBondProcess(:P_I, r_model, pi_model, :CPI, mprs)
 
     # 4. Simulation
     config = MarketConfig(
@@ -223,10 +223,13 @@ end
     # Excess Return of Stock over Rate
     ex_ret_S = ExcessReturnProcess(:Re_S, :S, :r)
 
+    # Gross return of Stock
+    gross_ret_S = GrossReturnProcess(:G_S, :S)
+
     # 3. Simulation
     config = MarketConfig(
         sims=1000, T=1.0, dt=0.01, M=100,
-        processes=[r_model, stock, ret_S, ex_ret_S] # Note: Order matters for dependencies
+        processes=[r_model, stock, ret_S, ex_ret_S, gross_ret_S] # Note: Order matters for dependencies
     )
 
     world = build_world(config)
@@ -241,6 +244,14 @@ end
     avg_Re = mean(world.paths.Re_S)
     println("Avg Excess Return (dt=0.01): $avg_Re")
     @test isapprox(avg_Re, 0.0005, atol=0.0005)
+
+    # Expected Gross Return ≈ 1 + drift * dt = 1 + 0.001 = 1.001
+    avg_G = mean(world.paths.G_S)
+    println("Avg Gross Return (dt=0.01): $avg_G")
+    @test isapprox(avg_G, 1.001, atol=0.0005)
+
+    # Check that Gross Return is exactly 1 + Simple Return (since it's a direct transformation)
+    @test isapprox(avg_G, 1.0 + avg_R, atol=1e-10)
 end
 
 @testset "Plotting Integration" begin
