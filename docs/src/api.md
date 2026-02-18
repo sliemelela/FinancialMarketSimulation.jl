@@ -1,1 +1,4 @@
 # Test
+```@autodocs
+Modules = [FinancialMarketSimulation]
+```

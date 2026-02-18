@@ -1,14 +1,36 @@
 # FinancialMarketSimulation.jl
-Welcome to the documentation for **FinancialMarketSimulation.jl**.
 
-## Overview
-This package provides a modular framework for simulating financial markets using Stochastic Differential Equations (SDEs).
+A flexible, high-performance framework for simulating financial markets using Stochastic Differential Equations (SDEs).
 
-## API Reference
-```@autodocs
-Modules = [FinancialMarketSimulation]
+## Features
+* **Modular Design**: Mix and match building blocks (Rates, Stocks, Bonds, Inflation).
+* **Correlated Shocks**: Simulate multi-asset markets with arbitrary correlation matrices.
+* **Context-Aware**: Create processes that depend on others (e.g., Stochastic Volatility, CPI).
+* **Visualization**: Built-in plotting for trajectories and distributions.
+
+## Installation
+```julia
+using Pkg
+Pkg.add(url="https://github.com/sliemelela/FinancialMarketSimulation.jl")
 ```
 
-### Summary
-1.  **Internal Helpers (`get_time_index`)**: The `checkdocs = :exports` setting will stop the error for these.
-2.  **Public API (`VasicekProcess`)**: The `index.md` with `@autodocs` will display these, resolving the error.
+## Quick Start
+```julia
+using FinancialMarketSimulation
+
+# Define Physics (Interest Rate)
+rate = VasicekProcess(:r, 0.3, 0.05, 0.02, 0.05, 1)
+
+# Build World (1 Year, 100 Steps)
+config = MarketConfig(sims=1000, T=1.0, M=100, processes=[rate])
+world  = build_world(config)
+
+# Plot
+plot_simulation(world)
+```
+
+### How to use this manual
+- Want to know how to use this package? Visit the [Tutorial](tutorial.md) to get started.
+- Want to know how the processes you simulate work in more detail?
+    Visit the [Models & Math](models.md) section.
+- The API reference can be found [here](api.md).

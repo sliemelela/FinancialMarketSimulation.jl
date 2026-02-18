@@ -12,9 +12,12 @@ makedocs(;
         edit_link="main",
         assets=String[],
     ),
+    checkdocs = :exports,
     pages=[
         "Home" => "index.md",
-        "API Reference" => "api.md", # Optional: separate page for types/functions
+        "Tutorial" => "tutorial.md",
+        "Models & Math" => "models.md",
+        "API Reference" => "api.md",
     ],
 )
 
