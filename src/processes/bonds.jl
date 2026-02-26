@@ -50,9 +50,10 @@ end
 function simulate!(storage::AbstractMatrix, p::NominalBondProcess, world::SimulationWorld)
     (; T, M) = world.config
     r_path = getproperty(world.paths, p.rate_process.name)
+    T_mat = p.T
 
     times = range(0, T, length=M+1)
-    h_vec = T .- times
+    h_vec = T_mat .- times
     ρ = world.config.correlations
 
     B_vec = B_vasicek.(p.rate_process.κ, h_vec)
@@ -117,9 +118,10 @@ function simulate!(storage::AbstractMatrix, p::InflationBondProcess, world::Simu
     r_path   = getproperty(world.paths, p.rate_process.name)
     pi_path  = getproperty(world.paths, p.infl_process.name)
     CPI_path = getproperty(world.paths, p.cpi_name)
+    T_mat = p.T
 
     times = range(0, T, length=M+1)
-    h_vec = T .- times
+    h_vec = T_mat .- times
     ρ = world.config.correlations
 
     B_r_vec  = B_vasicek.(p.rate_process.κ, h_vec)

@@ -72,7 +72,8 @@ $(TYPEDFIELDS)
 struct NominalBondProcess{R <: AbstractMarketProcess} <: AbstractMarketProcess
     name::Symbol
     rate_process::R
-
+    "Time to maturity of the bond (in years) from initial time t = 0"
+    T::Float64
     # Vector of Market Prices of Risk [ϕ_1, ϕ_2, ..., ϕ_N]
     # Corresponding to the shock indices 1, 2, ..., N
     market_risk_factors::Vector{Float64}
@@ -89,6 +90,7 @@ struct InflationBondProcess{R <: AbstractMarketProcess, I <: AbstractMarketProce
     rate_process::R
     infl_process::I
     cpi_name::Symbol
+    T::Float64
 
     market_risk_factors::Vector{Float64}
 end

@@ -12,11 +12,13 @@ using Statistics
     # Index 1: Risk premium for Rate Shock
     # Index 2: Risk premium for Inflation Shock
     # Index 3: Risk premium for Stock Shock (if we had one)
+
     mprs = [-0.1, -0.1, -0.2]
 
     # 3. Derivatives (Bonds)
-    nom_bond = NominalBondProcess(:P_N, r_model, mprs)
-    infl_bond = InflationBondProcess(:P_I, r_model, pi_model, :CPI, mprs)
+    T_mat = 1.0
+    nom_bond = NominalBondProcess(:P_N, r_model, T_mat, mprs)
+    infl_bond = InflationBondProcess(:P_I, r_model, pi_model, :CPI, T_mat, mprs)
 
     # 4. Simulation
     config = MarketConfig(
@@ -64,15 +66,16 @@ end
     λ_π = -ϕ_π - ϕ_r * ρ_rπ
 
     # Bond processes
-    nom_bond = NominalBondProcess(:P_N, r_model, mprs)
-    infl_bond = InflationBondProcess(:P_I, r_model, pi_model, :CPI, mprs)
+    T_mat = 10.0
+    nom_bond = NominalBondProcess(:P_N, r_model, T_mat, mprs)
+    infl_bond = InflationBondProcess(:P_I, r_model, pi_model, :CPI, T_mat, mprs)
 
     # Nominal Bond process as generic process
     B_r(h) = (1 - exp(-κ_r * h)) / κ_r
     B_π(h) = (1 - exp(-κ_π * h)) / κ_π
 
-    nom_drift(t, P_N, r_val) = (r_val - λ_r * σ_r * B_r(T - t)) * P_N
-    nom_diff(t, P_N, r_val) = -B_r(T - t) * σ_r * P_N
+    nom_drift(t, P_N, r_val) = (r_val - λ_r * σ_r * B_r(T_mat - t)) * P_N
+    nom_diff(t, P_N, r_val) = -B_r(T_mat - t) * σ_r * P_N
     nom_bond_as_generic = GenericSDEProcess(
         :P_N_generic,
         nom_drift,
