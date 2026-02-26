@@ -11,7 +11,8 @@
 
     # We define risk factors for 2 shocks (Rate and Stock)
     mprs = [-0.1, -0.2]
-    bond = NominalBondProcess(:P_N, r_model, mprs)
+    T_mat = 1.0
+    bond = NominalBondProcess(:P_N, r_model, T_mat, mprs)
 
     config = MarketConfig(
         sims=50, T=1.0, dt=0.01, M=100,

@@ -50,9 +50,10 @@ end
 function simulate!(storage::AbstractMatrix, p::NominalBondProcess, world::SimulationWorld)
     (; T, M) = world.config
     r_path = getproperty(world.paths, p.rate_process.name)
+    T_mat = p.T
 
     times = range(0, T, length=M+1)
-    h_vec = T .- times
+    h_vec = max.(0.0, T_mat .- times)
     ρ = world.config.correlations
 
     B_vec = B_vasicek.(p.rate_process.κ, h_vec)
@@ -113,19 +114,34 @@ function calc_A_I(h::Float64, p::InflationBondProcess, ρ::AbstractMatrix)
 end
 
 function simulate!(storage::AbstractMatrix, p::InflationBondProcess, world::SimulationWorld)
-    (; T, M) = world.config
+    (; T, dt, M) = world.config
     r_path   = getproperty(world.paths, p.rate_process.name)
     pi_path  = getproperty(world.paths, p.infl_process.name)
     CPI_path = getproperty(world.paths, p.cpi_name)
+    T_mat = p.T
 
     times = range(0, T, length=M+1)
-    h_vec = T .- times
+
+    # 1. Clamp time to maturity (h) so it doesn't drop below 0.0
+    h_vec = max.(0.0, T_mat .- times)
     ρ = world.config.correlations
+
+    # 2. Calculate the column index corresponding to maturity
+    # We use min(M+1, ...) to prevent out-of-bounds errors if T_mat > T
+    mat_idx = min(M + 1, floor(Int, T_mat / dt) + 1)
+
+    # 3. Create an array of column indices that flatlines at mat_idx
+    # Example: if mat_idx is 50, it looks like [1, 2, ..., 49, 50, 50, 50...]
+    col_indices = min.(1:(M+1), mat_idx)
+
+    # Extract the CPI values using these clamped indices
+    clamped_CPI = CPI_path[:, col_indices]
 
     B_r_vec  = B_vasicek.(p.rate_process.κ, h_vec)
     B_pi_vec = B_vasicek.(p.infl_process.κ, h_vec)
     A_I_vec  = [calc_A_I(h, p, ρ) for h in h_vec]
 
-    storage .= CPI_path .* exp.(A_I_vec' .- B_r_vec' .* r_path .+ B_pi_vec' .* pi_path)
+    # 4. Use clamped_CPI instead of the continuously growing CPI_path
+    storage .= clamped_CPI .* exp.(A_I_vec' .- B_r_vec' .* r_path .+ B_pi_vec' .* pi_path)
     return nothing
 end

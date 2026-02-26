@@ -152,9 +152,10 @@ From here, the implementation is quite simple:
 # Risk Factors: [ϕ_rate, ϕ_stock]
 # We assume a negative risk premium for both.
 market_risk = [-0.1, -0.2]
+T_mat = 10 # Time to maturity from t=0.
 
 # Nominal Bond P_N depends on :r
-bond = NominalBondProcess(:P_N, r_model, market_risk)
+bond = NominalBondProcess(:P_N, r_model, T_mat, market_risk)
 
 config = MarketConfig(sims=500, T=1.0, M=100, processes=[r_model, stock, bond], correlations=ρ)
 world = build_world(config)
@@ -196,7 +197,8 @@ cpi_model = GenericSDEProcess(
 We can finally create the inflation linked bond using
 ```julia
 mprs = [-0.1, -0.2, -0.1]
-infl_bond = InflationBondProcess(:P_I, r_model, pi_model, :CPI, mprs)
+T_mat = 10.0
+infl_bond = InflationBondProcess(:P_I, r_model, pi_model, :CPI, T_mat, mprs)
 config = MarketConfig(
     sims=100, T=1.0, dt=0.01, M=100,
     processes=[r_model, stock, bond, pi_model, cpi_model, infl_bond]
