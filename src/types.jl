@@ -65,6 +65,9 @@ shock_indices(p::VasicekProcess) = p.shock_idx
     NominalBondProcess{R}
 
 Holds reference to the Rate Process and a vector of Market Risk Factors.
+
+# Fields
+$(TYPEDFIELDS)
 """
 struct NominalBondProcess{R <: AbstractMarketProcess} <: AbstractMarketProcess
     name::Symbol

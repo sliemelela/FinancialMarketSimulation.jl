@@ -1,9 +1,9 @@
 # Julia
 Manifest*.toml
 docs/build/
+plots/
 
 # General
 .DS_Store
 .AppleDouble
 .LSOverride
-

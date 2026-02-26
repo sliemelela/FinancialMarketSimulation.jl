@@ -28,17 +28,23 @@ function calc_A_N(h::Float64, p::NominalBondProcess, ρ::AbstractMatrix)
 
     B_h = B_vasicek(κ, h)
 
-    # Term 1: Drift
-    term1 = (θ - λ_r * σ / κ) * (B_h - h)
+    # # Term 1: Drift
+    # term1 = (θ - λ_r * σ / κ) * (B_h - h)
 
-    # Term 2: Volatility
+    # # Term 2: Volatility
+    # exp_kh = exp(-κ * h); exp_2kh = exp(-2.0 * κ * h)
+    # term2 = (σ^2 / (2.0 * κ^3)) * (2.0 * exp_kh - 0.5 * exp_2kh - 1.5)
+
+    # # Term 3: Ito
+    # term3 = (σ^2 / (2.0 * κ^2)) * h
+
+    part1 = -h * θ + B_h * θ
     exp_kh = exp(-κ * h); exp_2kh = exp(-2.0 * κ * h)
-    term2 = (σ^2 / (2.0 * κ^3)) * (2.0 * exp_kh - 0.5 * exp_2kh - 1.5)
+    part2 = (σ^2 / (2.0 * κ^3)) * (2.0 * exp_kh - 0.5 * exp_2kh - 1.5)
+    part3 = h * (σ^2 / (2.0 * κ^2))
+    part4 = -λ_r * (σ / κ) * (B_h - h)
 
-    # Term 3: Ito
-    term3 = (σ^2 / (2.0 * κ^2)) * h
-
-    return term1 + term2 + term3
+    return part1 + part2 + part3 + part4
 end
 
 function simulate!(storage::AbstractMatrix, p::NominalBondProcess, world::SimulationWorld)
